@@ -16,6 +16,9 @@ class HabitTestCase(APITestCase):
         self.book = Book.objects.create(
             title="Руслан и Людмила", publication_date="2000-05-26", author=self.author
         )
+        self.book2 = Book.objects.create(
+            title="Book Two", publication_date="2022-01-02", author=self.author
+        )
         self.client.force_authenticate(user=self.user)
 
     def test_author_retrieve(self):
@@ -52,7 +55,7 @@ class HabitTestCase(APITestCase):
         }
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Book.objects.all().count(), 2)
+        self.assertEqual(Book.objects.all().count(), 3)
 
     def test_author_update(self):
         url = reverse("library:author-update", args=(self.author.pk,))
@@ -80,16 +83,15 @@ class HabitTestCase(APITestCase):
         url = reverse("library:books-detail", args=(self.book.pk,))
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Book.objects.all().count(), 0)
+        self.assertEqual(Book.objects.all().count(), 1)
 
     def test_author_list(self):
         url = reverse("library:author-list")
         response = self.client.get(url)
         data = response.json()
-        print(data)
         result = [
             {
-                "id": 4,
+                "id": 6,
                 "first_name": "Александр",
                 "last_name": "Пушкин",
                 "birth_date": "1799-05-26",
@@ -102,14 +104,31 @@ class HabitTestCase(APITestCase):
         url = reverse("library:books-list")
         response = self.client.get(url)
         data = response.json()
-        print(data)
         result = [
             {
-                "id": 9,
-                "title": "Руслан и Людмила",
+                "author": 11,
+                "id": 21,
+                "publication_date": "2022-01-02",
+                "title": "Book Two",
+            },
+            {
+                "author": 11,
+                "id": 20,
                 "publication_date": "2000-05-26",
-                "author": 9,
-            }
+                "title": "Руслан и Людмила",
+            },
         ]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(data, result)
+
+    def test_access_all_books(self):
+        BookLoan.objects.create(book=self.book, user=self.user)
+        response = self.client.get(reverse("library:books-list"))
+        self.assertNotIn(self.book.title.encode(), response.content)
+        self.assertIn(self.book2.title.encode(), response.content)
+
+    def test_access_own_loans(self):
+        book_loan = BookLoan.objects.create(book=self.book, user=self.user)
+        response = self.client.get(reverse("library:loans-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(str(book_loan.id).encode(), response.content)
