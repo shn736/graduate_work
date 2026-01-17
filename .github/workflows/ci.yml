@@ -26,8 +26,29 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: ${{ secrets.USER }}
+          POSTGRES_PASSWORD: ${{ secrets.PASSWORD }}
+          POSTGRES_DB: ${{ secrets.NAME }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DEBUG: ${{ secrets.DEBUG }}
+      NAME: ${{ secrets.NAME }}
+      USER: ${{ secrets.USER }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      HOST: ${{ secrets.HOST }}
+      PORT: ${{ secrets.PORT }}
 
     steps:
       - name: Check out code
@@ -43,8 +64,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        run: python manage.py test
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "Waiting for PostgreSQL to start..."
+          for i in {1..30}; do
+            if pg_isready -U user; then
+              echo "PostgreSQL is up!"
+              break
+            fi
+            echo "PostgreSQL is not ready yet, retrying in 1 second..."
+            sleep 1
+          done
+
+      - name: Run migration and tests
+        run: |
+          python manage.py migrate
+          python manage.py test
 
   build:
     needs: test
